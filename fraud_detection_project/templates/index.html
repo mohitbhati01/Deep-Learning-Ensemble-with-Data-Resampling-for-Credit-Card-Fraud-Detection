@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuardNet | Fraud Detection Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-theme">
+    <div class="background-glow"></div>
+    
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="icon">🛡️</span>
+                <h1>Guard<span>Net</span></h1>
+            </div>
+            <div class="status-badge">
+                <span class="dot"></span>
+                API Connected
+            </div>
+        </header>
+
+        <main>
+            <section class="prediction-module card glass">
+                <div class="card-header">
+                    <h2>Submit Transaction</h2>
+                    <p>Enter the numerical features for real-time fraud assessment.</p>
+                </div>
+                
+                <form id="fraudForm">
+                    <div class="input-grid">
+                        <div class="form-group">
+                            <label for="f1">Amount</label>
+                            <input type="number" id="f1" name="f1" step="0.01" placeholder="e.g. 125.50" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f2">Time (Sec)</label>
+                            <input type="number" id="f2" name="f2" step="1" placeholder="e.g. 3600" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f3">V1 Factor</label>
+                            <input type="number" id="f3" name="f3" step="0.0001" placeholder="e.g. -0.234" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f4">V2 Factor</label>
+                            <input type="number" id="f4" name="f4" step="0.0001" placeholder="e.g. 0.125" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f5">V3 Factor</label>
+                            <input type="number" id="f5" name="f5" step="0.0001" placeholder="e.g. -1.543" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f6">V4 Factor</label>
+                            <input type="number" id="f6" name="f6" step="0.0001" placeholder="e.g. 2.341" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="f7">V5 Factor</label>
+                            <input type="number" id="f7" name="f7" step="0.0001" placeholder="e.g. 0.0012" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="fillSample" class="btn secondary">Fill Sample</button>
+                        <button type="submit" class="btn primary">Run Assessment</button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="resultSection" class="result-module hidden">
+                <div class="prediction-card card glass">
+                    <div id="predictionBadge" class="prediction-badge">
+                        <span id="predictionResult">NORMAL</span>
+                    </div>
+                    
+                    <div class="probability-display">
+                        <div class="prob-label">Global Fraud Probability</div>
+                        <div id="globalProbValue" class="prob-value">0.00%</div>
+                        <div class="progress-bar">
+                            <div id="probBarFill" class="fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="ensemble-stats">
+                        <div class="chart-container">
+                            <canvas id="ensembleChart"></canvas>
+                        </div>
+                        <div class="metrics-list">
+                            <div class="metric-item">
+                                <span class="label">XGBoost</span>
+                                <span id="xgbVal" class="val">0.00</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="label">Random Forest</span>
+                                <span id="rfVal" class="val">0.00</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="label">LightGBM</span>
+                                <span id="lgbVal" class="val">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2026 GuardNet AI. All systems operational.</p>
+        </footer>
+    </div>
+
+    <script>
+        const fraudForm = document.getElementById('fraudForm');
+        const fillSample = document.getElementById('fillSample');
+        const resultSection = document.getElementById('resultSection');
+        let predictionChart = null;
+
+        fillSample.addEventListener('click', () => {
+            const samples = [0.0, 1.5, -0.2, 0.7, -1.2, 0.1, 0.4];
+            for(let i=1; i<=7; i++) {
+                document.getElementById('f'+i).value = samples[i-1];
+            }
+        });
+
+        fraudForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.textContent = 'Processing...';
+            btn.disabled = true;
+
+            const features = [];
+            for(let i=1; i<=7; i++) {
+                features.push(parseFloat(document.getElementById('f'+i).value));
+            }
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ features })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    showResults(data);
+                }
+            } catch (err) {
+                alert('Connection failure');
+            } finally {
+                btn.textContent = 'Run Assessment';
+                btn.disabled = false;
+            }
+        });
+
+        function showResults(data) {
+            resultSection.classList.remove('hidden');
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+
+            const probPercent = (data.fraud_probability * 100).toFixed(2);
+            document.getElementById('predictionResult').textContent = data.prediction.toUpperCase();
+            document.getElementById('globalProbValue').textContent = probPercent + '%';
+            document.getElementById('probBarFill').style.width = probPercent + '%';
+
+            const badge = document.getElementById('predictionBadge');
+            if (data.prediction === 'Fraud') {
+                badge.className = 'prediction-badge danger';
+                document.getElementById('probBarFill').className = 'fill danger';
+            } else {
+                badge.className = 'prediction-badge success';
+                document.getElementById('probBarFill').className = 'fill success';
+            }
+
+            // Individual model values
+            document.getElementById('xgbVal').textContent = data.model_details.xgb_probability.toFixed(4);
+            document.getElementById('rfVal').textContent = data.model_details.rf_probability.toFixed(4);
+            document.getElementById('lgbVal').textContent = data.model_details.lgb_probability.toFixed(4);
+
+            setupChart(data.model_details);
+        }
+
+        function setupChart(details) {
+            const ctx = document.getElementById('ensembleChart').getContext('2d');
+            
+            if(predictionChart) predictionChart.destroy();
+
+            predictionChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['XGBoost', 'Random Forest', 'LightGBM'],
+                    datasets: [{
+                        label: 'Fraud Confidence',
+                        data: [
+                            details.xgb_probability, 
+                            details.rf_probability, 
+                            details.lgb_probability
+                        ],
+                        backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                        borderColor: 'rgba(52, 152, 219, 1)',
+                        pointBackgroundColor: 'rgba(52, 152, 219, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1.0,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
